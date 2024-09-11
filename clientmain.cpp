@@ -49,6 +49,12 @@ int get_int_result(char* buffer) {
   return iresult;
 }
 
+// test cases
+// ./client ec2-13-53-76-30.eu-north-1.compute.amazonaws.com:5000
+// ./client ::ffff:d35:4c1e:5000
+// ./client 0000:0000:0000:0000:0000:ffff:0d35:4c1e:5000
+// ./client 13.53.76.30:5000
+
 int main(int argc, char *argv[]){
 
   if (argc != 2) {
