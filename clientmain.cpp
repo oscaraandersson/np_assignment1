@@ -16,6 +16,38 @@
 // Included to get the support library
 #include "calcLib.h"
 
+double get_float_result(char* buffer) {
+  double f1, f2, fresult;
+  char command[10];
+  sscanf(buffer, "%s" "%lg %lg", command, &f1, &f2);
+  if(strcmp(command,"fadd")==0){
+    fresult=f1+f2;
+  } else if (strcmp(command, "fsub")==0){
+    fresult=f1-f2;
+  } else if (strcmp(command, "fmul")==0){
+    fresult=f1*f2;
+  } else if (strcmp(command, "fdiv")==0){
+    fresult=f1/f2;
+  }
+  return fresult;
+}
+
+int get_int_result(char* buffer) {
+  int i1, i2, iresult;
+  char command[10];
+  sscanf(buffer, "%s" "%d %d", command, &i1, &i2);
+  if(strcmp(command,"add")==0){
+    iresult=i1+i2;
+  } else if (strcmp(command, "sub")==0){
+    iresult=i1-i2;
+  } else if (strcmp(command, "mul")==0){
+    iresult=i1*i2;
+  } else if (strcmp(command, "div")==0){
+    iresult=i1/i2;
+  }
+  return iresult;
+}
+
 int main(int argc, char *argv[]){
 
   /*
@@ -31,7 +63,7 @@ int main(int argc, char *argv[]){
   /* Do magic */
   int port=atoi(Destport);
 #ifdef DEBUG
-  printf("Host %s, and port %d.\n",Desthost,port);
+printf("Host %s, and port %d.\n",Desthost,port);
 #endif
 
   int s;
@@ -74,8 +106,33 @@ int main(int argc, char *argv[]){
   char ack[] = "OK\n";
   write(s, ack, strlen(ack));
 
+  // clear the buffer
   memset(buf, 0, sizeof(buf));
 
   read(s, buf, sizeof(buf));
   printf("%s", buf);
+
+  // parse the math problem in the buffer
+  if (buf[0] == 'f') {
+    double result = get_float_result(buf);
+    printf("result: %8.8g\n", result);
+    char result_str[1024];
+    sprintf(result_str, "%f8.8g\n", result);
+    write(s, result_str, strlen(result_str));
+  } else {
+    int result = get_int_result(buf);
+    printf("result: %d\n", result);
+    char result_str[1024];
+    sprintf(result_str, "%d\n", result);
+    write(s, result_str, strlen(result_str));
+  }
+
+  // read the message
+  memset(buf, 0, sizeof(buf));
+  read(s, buf, sizeof(buf));
+  printf("%s", buf);
+
+  // close the socket
+  close(s);
+  return 0;
 }
