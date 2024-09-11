@@ -12,6 +12,7 @@
 // Enable if you want debugging to be printed, see examble below.
 // Alternative, pass CFLAGS=-DDEBUG to make, make CFLAGS=-DDEBUG
 #define DEBUG
+#define BUFFER_SIZE 1024
 
 
 // Included to get the support library
@@ -27,6 +28,22 @@ int check_supported_version(const char *buffer, const char *version) {
     return 0;
   }
 }
+
+// Set a timeout for the socket (e.g., 5 seconds)
+void set_socket_timeout(int socket_fd) {
+  struct timeval timeout;
+  timeout.tv_sec = 5;  // 5 seconds
+  timeout.tv_usec = 0;
+
+  // Set the timeout for both send and receive operations
+  if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
+    perror("Failed to set socket receive timeout");
+  }
+  if (setsockopt(socket_fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)) < 0) {
+    perror("Failed to set socket send timeout");
+  }
+}
+
 
 
 double get_float_result(char* buffer) {
@@ -71,7 +88,7 @@ int main(int argc, char *argv[]){
 
   if (argc != 2) {
     printf("Usage: %s <DNS|IPv4|IPv6>:<PORT>\n", argv[0]);
-    return -1;
+    return 0;
   }
   // Find the last colon in the input to split address and port
   char *input = argv[1];
@@ -79,7 +96,7 @@ int main(int argc, char *argv[]){
 
   if (last_colon == NULL) {
     printf("Invalid input. Use <DNS|IPv4|IPv6>:<PORT>\n");
-    return -1;
+    return 0;
   }
 
   // Split the string into address and port
@@ -101,8 +118,9 @@ int main(int argc, char *argv[]){
   // The getaddrinfo can automatically resolve the format of the address and do DNS lookup
   int status;
   if ((status = getaddrinfo(dest_host, dest_port, &hints, &res)) != 0) {
-    printf("ERROR: RESOLVE ISSUE");
-    return -1;
+    printf("ERROR\n");
+    fprintf(stderr, "RESOLVE ISSUE\n");
+    return 0;
   }
 
   // Create the socket
@@ -111,23 +129,26 @@ int main(int argc, char *argv[]){
   if (s < 0) {
     perror("failed to create socket");
     freeaddrinfo(res);
-    return -1;
+    return 0;
   }
+
+  set_socket_timeout(s);
 
   // Connect to the server
   if (connect(s, res->ai_addr, res->ai_addrlen) < 0) {
     printf("ERROR: CANT CONNECT TO %s", dest_host);
     close(s);
     freeaddrinfo(res);
-    return -1;
+    return 0;
   }
 
 
   // create a buffer
   char buf[1024] = {0};
   // read the available version
+  // Read data from server (with limited buffer size)
   read(s, buf, sizeof(buf));
-  printf("%s", buf);
+  // printf("%s", buf);
 
   // Read the supported versions and check if we have support
   // otherwise print ERROR missmatch protocol
@@ -144,15 +165,15 @@ int main(int argc, char *argv[]){
   int found = 0;
   for (int i = 0; i < num_versions; i++) {
     if (check_supported_version(buf, supported_versions[i])) {
-      printf("Supported version found: %s\n", supported_versions[i]);
       found = 1;
       break;  // Stop if we find a supported version
     }
   }
 
   if (!found) {
-    printf("ERROR: MISSMATCH PROTOCOL\n");
-    return -1;
+    printf("ERROR\n");
+    fprintf(stderr, "No supported version found\n");
+    return 0;
   }
 
 
