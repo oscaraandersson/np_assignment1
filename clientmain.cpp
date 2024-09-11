@@ -17,6 +17,18 @@
 // Included to get the support library
 #include "calcLib.h"
 
+int check_supported_version(const char *buffer, const char *version) {
+  // Use strstr to search for the version string within the buffer
+  if (strstr(buffer, version) != NULL) {
+    // Found the supported version in the buffer
+    return 1;
+  } else {
+    // Version not found
+    return 0;
+  }
+}
+
+
 double get_float_result(char* buffer) {
   double f1, f2, fresult;
   char command[10];
@@ -66,8 +78,8 @@ int main(int argc, char *argv[]){
   char *last_colon = strrchr(input, ':');
 
   if (last_colon == NULL) {
-      printf("Invalid input. Use <DNS|IPv4|IPv6>:<PORT>\n");
-      return -1;
+    printf("Invalid input. Use <DNS|IPv4|IPv6>:<PORT>\n");
+    return -1;
   }
 
   // Split the string into address and port
@@ -89,22 +101,22 @@ int main(int argc, char *argv[]){
   // The getaddrinfo can automatically resolve the format of the address and do DNS lookup
   int status;
   if ((status = getaddrinfo(dest_host, dest_port, &hints, &res)) != 0) {
-      fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
-      return -1;
+    printf("ERROR: RESOLVE ISSUE");
+    return -1;
   }
 
   // Create the socket
   int s;
   s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
   if (s < 0) {
-      perror("failed to create socket");
-      freeaddrinfo(res);
-      return -1;
+    perror("failed to create socket");
+    freeaddrinfo(res);
+    return -1;
   }
 
   // Connect to the server
   if (connect(s, res->ai_addr, res->ai_addrlen) < 0) {
-    perror("failed to connect");
+    printf("ERROR: CANT CONNECT TO %s", dest_host);
     close(s);
     freeaddrinfo(res);
     return -1;
@@ -117,7 +129,34 @@ int main(int argc, char *argv[]){
   read(s, buf, sizeof(buf));
   printf("%s", buf);
 
-  // use send or write
+  // Read the supported versions and check if we have support
+  // otherwise print ERROR missmatch protocol
+  // Each supported version is on a new line
+
+  // go through the buffer and check if we have support
+  const char *supported_versions[] = {
+    "TEXT TCP 1.0",
+    "TEXT TCP 1.1"
+  };
+  int num_versions = sizeof(supported_versions) / sizeof(supported_versions[0]);
+
+  // Loop through all your supported versions
+  int found = 0;
+  for (int i = 0; i < num_versions; i++) {
+    if (check_supported_version(buf, supported_versions[i])) {
+      printf("Supported version found: %s\n", supported_versions[i]);
+      found = 1;
+      break;  // Stop if we find a supported version
+    }
+  }
+
+  if (!found) {
+    printf("ERROR: MISSMATCH PROTOCOL\n");
+    return -1;
+  }
+
+
+  // use send or write?
   // - write is simpler but if you want flags use send.
   char ack[] = "OK\n";
   write(s, ack, strlen(ack));
@@ -131,13 +170,17 @@ int main(int argc, char *argv[]){
   // parse the math problem in the buffer
   if (buf[0] == 'f') {
     double result = get_float_result(buf);
-    printf("result: %8.8g\n", result);
+    #ifdef DEBUG
+    printf("Calculated the result to: %8.8g\n", result);
+    #endif
     char result_str[1024];
     sprintf(result_str, "%f8.8g\n", result);
     write(s, result_str, strlen(result_str));
   } else {
     int result = get_int_result(buf);
-    printf("result: %d\n", result);
+    #ifdef DEBUG
+    printf("Calculated the result to: %d\n", result);
+    #endif
     char result_str[1024];
     sprintf(result_str, "%d\n", result);
     write(s, result_str, strlen(result_str));
