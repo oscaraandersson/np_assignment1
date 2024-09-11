@@ -3,6 +3,7 @@
 #include <stdlib.h>
 /* You will to add includes here */
 #include <sys/socket.h>
+#include <netdb.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -50,50 +51,59 @@ int get_int_result(char* buffer) {
 
 int main(int argc, char *argv[]){
 
-  /*
-    Read first input, assumes <ip>:<port> syntax, convert into one string (Desthost) and one integer (port).
-     Atm, works only on dotted notation, i.e. IPv4 and DNS. IPv6 does not work if its using ':'.
-  */
-  char delim[]=":";
-  char *Desthost=strtok(argv[1],delim);
-  char *Destport=strtok(NULL,delim);
-  // *Desthost now points to a sting holding whatever came before the delimiter, ':'.
-  // *Dstport points to whatever string came after the delimiter.
+  if (argc != 2) {
+    printf("Usage: %s <DNS|IPv4|IPv6>:<PORT>\n", argv[0]);
+    return -1;
+  }
+  // Find the last colon in the input to split address and port
+  char *input = argv[1];
+  char *last_colon = strrchr(input, ':');
 
-  /* Do magic */
-  int port=atoi(Destport);
-#ifdef DEBUG
-printf("Host %s, and port %d.\n",Desthost,port);
-#endif
+  if (last_colon == NULL) {
+      printf("Invalid input. Use <DNS|IPv4|IPv6>:<PORT>\n");
+      return -1;
+  }
 
+  // Split the string into address and port
+  *last_colon = '\0';
+  char *dest_host = input;
+  char *dest_port = last_colon + 1;
+
+  #ifdef DEBUG
+  printf("Host %s, and port %d.\n",dest_host, atoi(dest_port));
+  #endif
+
+  // Set up for getaddrinfo
+  // https://stackoverflow.com/questions/755308/whats-the-hints-mean-for-the-addrinfo-name-in-socket-programming
+  struct addrinfo hints, *res;
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_UNSPEC;        // Allow for both IPv4 or IPv6
+  hints.ai_socktype = SOCK_STREAM;    // TCP stream sockets
+
+  // The getaddrinfo can automatically resolve the format of the address and do DNS lookup
+  int status;
+  if ((status = getaddrinfo(dest_host, dest_port, &hints, &res)) != 0) {
+      fprintf(stderr, "getaddrinfo error: %s\n", gai_strerror(status));
+      return -1;
+  }
+
+  // Create the socket
   int s;
-  struct sockaddr_in channel;
-
-  // Create the socket (file descriptor to endpoint)
-  // domain: AF_INET IpV4 internet protocols
-  //  - what is the difference between AF_INET and PF_INET
-  // type: communication semantics SOCK_STREAM that provides a two way communication
-  s = socket(AF_INET, SOCK_STREAM, 0);
-  if (s<0) {
-    printf("failed to create socket\n");
+  s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+  if (s < 0) {
+      perror("failed to create socket");
+      freeaddrinfo(res);
+      return -1;
   }
 
-  // sockaddr_in doc
-  // https://www.gta.ufrj.br/ensino/eel878/sockets/sockaddr_inman.html
-  memset(&channel, 0, sizeof(channel));
-  channel.sin_family = AF_INET;
-  channel.sin_port = htons(port);
-  // convert ipv4 numbers and does to byteformat in correct byteorder
-  //
-  // What is the difference between inet_pton and inet_aton. check man
-  // - inet_pton can convert both but you have to specify the version
-  if (inet_aton(Desthost, &channel.sin_addr) <= 0) {
-      printf("failed to convert id address to bytes\n");
+  // Connect to the server
+  if (connect(s, res->ai_addr, res->ai_addrlen) < 0) {
+    perror("failed to connect");
+    close(s);
+    freeaddrinfo(res);
+    return -1;
   }
 
-  if (connect(s, (struct sockaddr*)&channel, sizeof(channel)) < 0) {
-    printf("failed to connect\n");
-  }
 
   // create a buffer
   char buf[1024] = {0};
